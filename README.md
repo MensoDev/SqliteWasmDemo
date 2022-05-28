@@ -79,3 +79,114 @@ public class Todo
     }
 }
 ```
+
+Agora precisaremos criar nossa interface de repositório, que será responsável por armazenar as informações no banco de dados, aqui veremos algo comum nada de novo.
+
+```csharp
+using TodoList.Domain.Entities;
+
+namespace TodoList.Domain.Repositories;
+
+public interface ITodoRepository
+{
+    ValueTask<IEnumerable<Todo>> GetAllAsync();
+    ValueTask<Todo> GetByIdAsync(Guid id);
+    
+    ValueTask RegisterAsync(Todo todo);
+    
+    void Update(Todo todo);
+    
+    void Remove(Todo todo);
+}
+```
+
+Aqui para nos basta essa interface `ITodoRepository`, e com isso finalizamos nosso Dominio!
+
+### 3. Implementando a camada de acesso a dados
+
+É aqui que, de fato vamos destrinchar a mágica do uso do SQLite com EntityFrameworkCore no navegador por meio do Blazor Wasm.
+
+> Neste artigo usamos alguns pré-lançamentos e esses recursos e APIs podem (e certamente mudarão) no futuro até o lançamento.
+
+Em estruturas SPAs populares como Angular ou React, o IndexedDB é frequentemente usado  para armazenar dados do lado do cliente e ele é mais ou menos um banco de dados dos navegadores atuais, e como a maioria das estruturas SPAs são em JavaScript elas conseguem se comunicar diretamente com IndexedDB, mas o Blazor Web Assembly difere, e para se comunicar com o IndexedDB temos que utilizar um invólucro para o JavaScript (JSInterop) para se comunicar com o banco, e assim persistir os dados!
+
+Mas isso é realmente necessário? Como estamos no mundo dotNET, podemos escolher usar o EntityFrameworkCore como a abordagem de acesso ao banco de dados & tecnologia e isso parece ótimo. Com esse cenário, temos o poder do EntityFrameworkCore para executar consultas SQL rápidas e complexas em um banco de dados sem ter que construir a ponte para o IndexedDB com o JSInterop.
+
+Neste artigo sentiremos um gostinho do uso do EntityFrameworkCore e SQLite no navegador, mas o suficiente para lhe dar um caminho para trilhar conforme sua vontade e expertise, tudo isso quase sem usar JavaScript.
+
+Vamos precisar instalar os seguintes pacotes e referenciar o projeto de domínio. Um ponto importante ajuste os caminhos dos projetos e para os nomes caso os tenha alterado!
+
+- [Microsoft.EntityFrameworkCore.Sqlite.Core](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Sqlite.Core/6.0.5) 6.0.5
+- [SQLitePCLRaw.bundle_e_sqlite3](https://www.nuget.org/packages/SQLitePCLRaw.bundle_e_sqlite3/2.1.0-pre20220427180151) (versão preview)
+- `dotnet add reference ..\Todo.Domain\Todo.Domain.csproj`
+
+O `SQLitePCLRaw.bundle_e_sqlite3` faz magica por trás dos panos, ele é responsável por fornecer e/ou criar a biblioteca SQLite nativa, correta e específica para cada plataforma alvo. Isso é essencialmente o mesmo que se você enviar manualmente um binário específico para cada plataforma como, por exemplo, `sqlite3.dll` para o Windows e `sqlite3.so` para Linux, e como estamos mirando o WebAssembly, a implementação C do SQLite precisa ser compilada para essa plataforma.
+
+> TODO: Pegar um print do sqlite3.a/sqlite3.so etc...
+
+Este é um mecanismo completo para o banco de dado SQLite, pronto para ser carregado no navegador e para ser executado no tempo de execução do Wasm. Com isso, nosso aplicativo Blazor Web Assembly pode usar o EntityFrameworkCore para falar diretamente com um banco de dados SQLite real e incorporado no navegador.
+
+Também precisamos editar o arquivo `.csproject` do projeto de acesso a dados para adicionarmo uma configuração!
+
+```xml
+<WasmNativeBuild>true</WasmNativeBuild>
+```
+
+Com isso o `.csproject` do projeto de acesso a dado ficara algo como isso
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <WasmNativeBuild>true</WasmNativeBuild>
+  </PropertyGroup>
+
+
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="6.0.5" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite.Core" Version="6.0.5" />		
+		<PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.0-pre20220427180151" />	
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Todo.Domain\Todo.Domain.csproj" />
+  </ItemGroup>
+
+</Project>
+```
+
+Agora vamos começar adicionando o nosso DbContext com algo parecido com isso e já será o suficiente para nossa demo, provavelmente se você já trabalhou com EntityFrameworkCore verá algo familiar.
+
+```csharp
+using Microsoft.EntityFrameworkCore;
+using TodoList.Domain.Entities;
+
+namespace TodoList.Infra.Data;
+
+public class TodoListDbContext : DbContext
+{
+    public TodoListDbContext(DbContextOptions<TodoListDbContext> options) : base(options)
+    { }
+
+    public DbSet<Todo> Todos { get; set; } = null!;
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Todo>().HasKey(p => p.Id);
+        modelBuilder.Entity<Todo>().Property(p => p.Title).IsRequired().HasMaxLength(100);
+    }
+}
+```
+Sim, é um DbContext bem simples, mais já será mais que o suficiente para nossa demostração.
+
+Agora vamos criar três interfaces base para nos ajudar a cumprir nossa missão de usar o SQLite com o EntityFrameworkCore no Blazor Web Assembly.
+
+Nossa primeira interface vai nos ajudar a armazenar e sincronizar o arquivo do banco de dados, o salvando, seja no navegador em cache, etc. ou em algum serviço em nuvem para armazenar o banco e aqui vai conforme sua necessidade e imaginação!
+
