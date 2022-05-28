@@ -7,6 +7,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Services", "Services", "{82
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TodoList.Domain", "src\TodoList.Domain\TodoList.Domain.csproj", "{5C2E702C-67E2-4EE1-957D-78CA026A5F0D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TodoList.Infra.Data", "src\TodoList.Infra.Data\TodoList.Infra.Data.csproj", "{AA9F88F6-0A76-4E8A-AD28-AE062549AB13}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -17,11 +19,16 @@ Global
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{5C2E702C-67E2-4EE1-957D-78CA026A5F0D} = {82DDAD36-620A-4BE7-8008-CAAD3A7C8D72}
+		{AA9F88F6-0A76-4E8A-AD28-AE062549AB13} = {82DDAD36-620A-4BE7-8008-CAAD3A7C8D72}
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{5C2E702C-67E2-4EE1-957D-78CA026A5F0D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{5C2E702C-67E2-4EE1-957D-78CA026A5F0D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5C2E702C-67E2-4EE1-957D-78CA026A5F0D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5C2E702C-67E2-4EE1-957D-78CA026A5F0D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AA9F88F6-0A76-4E8A-AD28-AE062549AB13}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AA9F88F6-0A76-4E8A-AD28-AE062549AB13}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AA9F88F6-0A76-4E8A-AD28-AE062549AB13}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AA9F88F6-0A76-4E8A-AD28-AE062549AB13}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
