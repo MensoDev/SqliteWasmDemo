@@ -4,5 +4,4 @@ public interface IDatabaseStorageService
 {
     Task<int> SyncDatabaseAsync(string filename);
     Task<string> GenerateDownloadLinkAsync(string filename);
-    Task<bool> RemoveDatabaseAsync(string filename);
 }
