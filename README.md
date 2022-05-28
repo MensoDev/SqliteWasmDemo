@@ -190,3 +190,18 @@ Agora vamos criar três interfaces base para nos ajudar a cumprir nossa missão 
 
 Nossa primeira interface vai nos ajudar a armazenar e sincronizar o arquivo do banco de dados, o salvando, seja no navegador em cache, etc. ou em algum serviço em nuvem para armazenar o banco e aqui vai conforme sua necessidade e imaginação!
 
+```csharp
+namespace TodoList.Infra.Data.Services;
+
+public interface IDatabaseStorageService
+{
+    Task<int> SyncDatabaseAsync(string filename);
+    Task<string> GenerateDownloadLinkAsync(string filename);
+}
+```
+
+Poderíamos talvez armazenar o banco de dados ou pelo menos um backup dele em alguma nuvem privada do usuário como, por exemplo, Google Drive ou OneDrive, etc., mas para deixar esse artigo o mais simples possível vamos salvar o banco no cache do navegador.
+
+Neste ponto teremos que usar um pouco de JavaScript para poder acessar o cache do navegador, pois o Blazor Web Assembly ainda não consegui fazer isso diretamente!
+
+Este código JavaScript nos ajudara a sincronizar o banco de dados com o cache, e como extra, ira nos dar um link para download do banco de dados!
