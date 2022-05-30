@@ -118,7 +118,7 @@ Vamos precisar instalar os seguintes pacotes e referenciar o projeto de domínio
 
 - [Microsoft.EntityFrameworkCore.Sqlite.Core](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Sqlite.Core/6.0.5) 6.0.5
 - [SQLitePCLRaw.bundle_e_sqlite3](https://www.nuget.org/packages/SQLitePCLRaw.bundle_e_sqlite3/2.1.0-pre20220427180151) (versão preview)
-- `dotnet add reference ..\Todo.Domain\Todo.Domain.csproj`
+- `dotnet add reference ..\TodoList.Domain\TodoList.Domain.csproj`
 
 O `SQLitePCLRaw.bundle_e_sqlite3` faz magica por trás dos panos, ele é responsável por fornecer e/ou criar a biblioteca SQLite nativa, correta e específica para cada plataforma alvo. Isso é essencialmente o mesmo que se você enviar manualmente um binário específico para cada plataforma como, por exemplo, `sqlite3.dll` para o Windows e `sqlite3.so` para Linux, e como estamos mirando o WebAssembly, a implementação C do SQLite precisa ser compilada para essa plataforma.
 
@@ -206,7 +206,7 @@ Neste ponto teremos que usar um pouco de JavaScript para poder acessar o cache d
 
 Este código JavaScript nos ajudara a sincronizar o banco de dados com o cache, e como extra, ira nos dar um link para download do banco de dados!
 
-````javascript
+```javascript
 export async function  syncDatabaseWithBrowserCache(filename) {   
     
     window.blazorWasmDatabase = window.blazorWasmDatabase || {
@@ -280,13 +280,13 @@ export async function generateDownloadLinkAsync(filename) {
 
     return '';
 }
-````
+```
 
 Agora vamos implementar a interface `IDatabaseStorageService`, a implementação será bem simples, aqui tenho um código de exemplo, basicamente ele vai fazer chamadas ao código JavaScript acima, por meio do `JSInterop`
 
 Esta classe fornece um exemplo de como a funcionalidade JavaScript pode ser encapsulada em uma classe dotNET para facilitar o consumo. O módulo JavaScript associado é carregado sob demanda quando necessário. Esta classe pode ser registrada como serviço de DI com escopo e então injetada no Blazor componentes para uso.
 
-````csharp
+```csharp
 using Microsoft.JSInterop;
 using TodoList.Infra.Data.Services;
 
@@ -299,7 +299,7 @@ public class BrowserCacheDatabaseStorageService : IDatabaseStorageService, IAsyn
     public BrowserCacheDatabaseStorageService(IJSRuntime jsRuntime)
     {
         _moduleTask = new Lazy<Task<IJSObjectReference>>(() => jsRuntime.InvokeAsync<IJSObjectReference>(
-                "import", $"./_content/Todo.Infra.Data/browserCacheDatabaseStorageService.js" ).AsTask()
+                "import", $"./_content/TodoList.Infra.Data/browserCacheDatabaseStorageService.js" ).AsTask()
         );
     }
     
@@ -324,22 +324,22 @@ public class BrowserCacheDatabaseStorageService : IDatabaseStorageService, IAsyn
         }
     }
 }
-````
+```
 Todo esse código é bastante simples, ele vai sincronizar o banco de dados com o cache do navegador, e de extra vai gerar um link para download do banco de dados!
 
 Também vamos precisar de um serviço para fazer Swap do banco de dados legado pelo atual, ou seja, basicamente ele vai trocar o banco de dados ativo pelo backup!
 
-````csharp
+```csharp
 namespace TodoList.Infra.Data.Services;
 
 public interface IDatabaseSwapService
 {
     void DoSwap(string sourceFilename, string targetFilename);
 }
-````
+```
 Aqui temos um código de exemplo implementando esse interface `IDatabaseSwapService`
 
-````csharp
+```csharp
 using Microsoft.Data.Sqlite;
 using TodoList.Infra.Data.Services;
 
@@ -361,11 +361,11 @@ public class DatabaseSwapService : IDatabaseSwapService
         sourceDatabase.Close();
     }
 }
-````
+```
 
 Feito isso, vamos precisar criar um BlazorWasmDbContextFactory (`IBlazorWasmDbContextFactory`) que basicamente ele vai orquestrar os serviços de Storage e Swap. Ele espera até que o banco de dados seja restaurado  para retorna contexto do EntityFrameworkCore criado, e faz o backup do banco de dados quanto ocorre salvamentos bem-sucedidos, a baixo tenho um exemplo de código para isso, vale ressaltar ser um exemplo e pode ser que o código não esteja em uma boa forma!
 
-````csharp
+```csharp
 using Microsoft.EntityFrameworkCore;
 
 namespace TodoList.Infra.Data.Services;
@@ -375,11 +375,11 @@ public interface IBlazorWasmDbContextFactory<TContext>
 {
     Task<TContext> CreateDbContextAsync();
 }
-````
+```
 
 A implementação parece ser um pouco complexa, mais é simples, apenas fazemos a gerência dos nomes dos arquivos e do banco e dos serviços que criamos anteriormente!
 
-````csharp
+```csharp
 using Microsoft.EntityFrameworkCore;
 using TodoList.Infra.Data.Services;
 
@@ -508,4 +508,70 @@ public class BlazorWasmDbContextFactory<TContext> : IBlazorWasmDbContextFactory<
         return _lastStatus;
     }
 }
-````
+```
+
+Ok, para facilitar e ser mais eficiente vamos criar um extensions method para registrar esses serviços no contêiner de injeção de dependência de serviços (DI).
+
+```csharp
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using TodoList.Infra.Data.Services;
+
+namespace TodoList.Infra.Data.Extensions;
+
+public static class ServiceCollectionExtensions
+{
+    public static IServiceCollection AddBlazorWasmDatabaseContextFactory<TContext>( 
+        this IServiceCollection serviceCollection, 
+        Action<DbContextOptionsBuilder>? optionsAction = null,
+        ServiceLifetime lifetime = ServiceLifetime.Singleton) where TContext : DbContext
+        => AddBlazorWasmDatabaseContextFactory<TContext>(
+            serviceCollection,
+            optionsAction == null ? null : (_, oa) => optionsAction(oa),
+            lifetime);
+
+    public static IServiceCollection AddBlazorWasmDatabaseContextFactory<TContext>(
+        this IServiceCollection serviceCollection,
+        Action<IServiceProvider, DbContextOptionsBuilder>? optionsAction,
+        ServiceLifetime lifetime = ServiceLifetime.Singleton)
+        where TContext : DbContext
+    {
+        serviceCollection.TryAdd(
+            new ServiceDescriptor(
+                typeof(IDatabaseStorageService),
+                typeof(BrowserCacheDatabaseStorageService),
+                ServiceLifetime.Singleton));
+
+        serviceCollection.TryAdd(
+            new ServiceDescriptor(
+                typeof(IDatabaseSwapService),
+                typeof(DatabaseSwapService),
+                ServiceLifetime.Singleton));
+
+        serviceCollection.TryAdd(
+            new ServiceDescriptor(
+                typeof(IBlazorWasmDbContextFactory<TContext>),
+                typeof(BlazorWasmDbContextFactory<TContext>),
+                ServiceLifetime.Singleton));
+
+        serviceCollection.AddDbContextFactory<TContext>(
+            optionsAction ?? ((_, _) => { }), lifetime);
+
+        return serviceCollection;
+    }
+}
+```
+
+A partir daqui podemos começar a implementar o front, será algo simples e vamos utilizar o [MudBlazor](https://mudblazor.com/docs/overview) para otimizar nosso tempo e esforço!
+
+### 4. Implementação do Front
+
+Vamos precisar de algumas dependência e referenciar o projeto de acesso a dados e o projeto de domínio.
+
+- `dotnet add reference ..\TodoList.Infra.Data\TodoList.Infra.Data.csproj`
+- `dotnet add reference ..\TodoList.Domain\TodoList.Domain.csproj`
+- [MudBlazor](https://www.nuget.org/packages/MudBlazor): dotnet add package MudBlazor
+
+Quanto a implementação do MudBlazor não vou me deter a isso aqui neste artigo, caso tenha interesse você pode olhar a documentação, caso não queira você pode, implementar na mão as paginas e componentes ou utilizar outro Framework conforme seu gosto e interesse!
+
