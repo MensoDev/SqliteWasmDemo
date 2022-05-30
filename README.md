@@ -205,3 +205,307 @@ Poderíamos talvez armazenar o banco de dados ou pelo menos um backup dele em al
 Neste ponto teremos que usar um pouco de JavaScript para poder acessar o cache do navegador, pois o Blazor Web Assembly ainda não consegui fazer isso diretamente!
 
 Este código JavaScript nos ajudara a sincronizar o banco de dados com o cache, e como extra, ira nos dar um link para download do banco de dados!
+
+````javascript
+export async function  syncDatabaseWithBrowserCache(filename) {   
+    
+    window.blazorWasmDatabase = window.blazorWasmDatabase || {
+        init: false,
+        cache: await caches.open('wasmDatabase')
+    };
+
+    const db = window.blazorWasmDatabase;
+
+    const backupPath = `/${filename}_backup`;
+    const cachePath = `/database/cache/${filename}`;
+
+    if (!db.init) {
+        db.init = true;
+        const resp = await db.cache.match(cachePath);
+
+        if (resp && resp.ok) {
+            const res = await resp.arrayBuffer();
+            if (res) {
+                console.log(`Database Restoring  ${res.byteLength} bytes`);
+                FS.writeFile(backupPath, new Uint8Array(res));
+                return 0;
+            }
+        }
+    }
+
+    if (FS.analyzePath(backupPath).exists) {
+
+        const waitFlush = new Promise((done, _) => {
+            setTimeout(done, 10);
+        });
+
+        await waitFlush;
+
+        const data = FS.readFile(backupPath);
+
+        const blob = new Blob([data], {
+            type: 'application/octet-stream',
+            ok: true,
+            status: 200
+        });
+
+        const headers = new Headers({
+            'content-length': blob.size
+        });
+
+        const response = new Response(blob, {
+            headers
+        });
+
+        await db.cache.put(cachePath, response);
+
+        FS.unlink(backupPath);
+
+        return 1;
+    }
+    
+    return -1;
+}
+
+export async function generateDownloadLinkAsync(filename) {
+
+    const cachePath = `/database/cache/${filename}`;
+    const db = window.blazorWasmDatabase;
+    const resp = await db.cache.match(cachePath);
+
+    if (resp && resp.ok) {
+        const res = await resp.blob();
+        if (res) { return URL.createObjectURL(res); }
+    }
+
+    return '';
+}
+````
+
+Agora vamos implementar a interface `IDatabaseStorageService`, a implementação será bem simples, aqui tenho um código de exemplo, basicamente ele vai fazer chamadas ao código JavaScript acima, por meio do `JSInterop`
+
+Esta classe fornece um exemplo de como a funcionalidade JavaScript pode ser encapsulada em uma classe dotNET para facilitar o consumo. O módulo JavaScript associado é carregado sob demanda quando necessário. Esta classe pode ser registrada como serviço de DI com escopo e então injetada no Blazor componentes para uso.
+
+````csharp
+using Microsoft.JSInterop;
+using TodoList.Infra.Data.Services;
+
+namespace TodoList.Infra.Data;
+
+public class BrowserCacheDatabaseStorageService : IDatabaseStorageService, IAsyncDisposable
+{
+    private readonly Lazy<Task<IJSObjectReference>> _moduleTask;
+    
+    public BrowserCacheDatabaseStorageService(IJSRuntime jsRuntime)
+    {
+        _moduleTask = new Lazy<Task<IJSObjectReference>>(() => jsRuntime.InvokeAsync<IJSObjectReference>(
+                "import", $"./_content/Todo.Infra.Data/browserCacheDatabaseStorageService.js" ).AsTask()
+        );
+    }
+    
+    public async Task<int> SyncDatabaseAsync(string filename)
+    {
+        var module = await _moduleTask.Value;
+        return await module.InvokeAsync<int>("syncDatabaseWithStorageAsync", filename);
+    }
+
+    public async Task<string> GenerateDownloadLinkAsync(string filename)
+    {
+        var module = await _moduleTask.Value;
+        return await module.InvokeAsync<string>("generateDownloadLinkAsync", filename);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_moduleTask.IsValueCreated)
+        {
+            var module = await _moduleTask.Value;
+            await module.DisposeAsync();
+        }
+    }
+}
+````
+Todo esse código é bastante simples, ele vai sincronizar o banco de dados com o cache do navegador, e de extra vai gerar um link para download do banco de dados!
+
+Também vamos precisar de um serviço para fazer Swap do banco de dados legado pelo atual, ou seja, basicamente ele vai trocar o banco de dados ativo pelo backup!
+
+````csharp
+namespace TodoList.Infra.Data.Services;
+
+public interface IDatabaseSwapService
+{
+    void DoSwap(string sourceFilename, string targetFilename);
+}
+````
+Aqui temos um código de exemplo implementando esse interface `IDatabaseSwapService`
+
+````csharp
+using Microsoft.Data.Sqlite;
+using TodoList.Infra.Data.Services;
+
+namespace TodoList.Infra.Data;
+
+public class DatabaseSwapService : IDatabaseSwapService
+{
+    public void DoSwap(string sourceFilename, string destFilename)
+    {
+        using var sourceDatabase = new SqliteConnection($"Data Source={sourceFilename}");
+        using var targetDatabase = new SqliteConnection($"Data Source={destFilename}");
+
+        sourceDatabase.Open();
+        targetDatabase.Open();
+
+        sourceDatabase.BackupDatabase(targetDatabase);
+
+        targetDatabase.Close();
+        sourceDatabase.Close();
+    }
+}
+````
+
+Feito isso, vamos precisar criar um BlazorWasmDbContextFactory (`IBlazorWasmDbContextFactory`) que basicamente ele vai orquestrar os serviços de Storage e Swap. Ele espera até que o banco de dados seja restaurado  para retorna contexto do EntityFrameworkCore criado, e faz o backup do banco de dados quanto ocorre salvamentos bem-sucedidos, a baixo tenho um exemplo de código para isso, vale ressaltar ser um exemplo e pode ser que o código não esteja em uma boa forma!
+
+````csharp
+using Microsoft.EntityFrameworkCore;
+
+namespace TodoList.Infra.Data.Services;
+
+public interface IBlazorWasmDbContextFactory<TContext>
+    where TContext : DbContext
+{
+    Task<TContext> CreateDbContextAsync();
+}
+````
+
+A implementação parece ser um pouco complexa, mais é simples, apenas fazemos a gerência dos nomes dos arquivos e do banco e dos serviços que criamos anteriormente!
+
+````csharp
+using Microsoft.EntityFrameworkCore;
+using TodoList.Infra.Data.Services;
+
+namespace TodoList.Infra.Data;
+
+public class BlazorWasmDbContextFactory<TContext> : IBlazorWasmDbContextFactory<TContext>
+    where TContext : DbContext
+{
+    private static readonly IDictionary<Type, string> FileNames = new Dictionary<Type, string>();
+    
+    private readonly IDbContextFactory<TContext> _dbContextFactory;
+    private readonly IDatabaseStorageService _dbStorageService;
+    private readonly IDatabaseSwapService _dbSwapService;
+    private Task<int>? _startupTask;
+    private int _lastStatus = -2;
+    private bool _init;
+
+    public BlazorWasmDbContextFactory(
+        IDbContextFactory<TContext> dbContextFactory, 
+        IDatabaseStorageService dbStorageService, 
+        IDatabaseSwapService dbSwapService)
+    {
+        _dbContextFactory = dbContextFactory;
+        _dbStorageService = dbStorageService;
+        _dbSwapService = dbSwapService;
+        _startupTask = RestoreAsync();
+    }
+    
+    private static string Filename => FileNames[typeof(TContext)];
+    private static string BackupFile => $"{Filename}_backup";
+
+    public async Task<TContext> CreateDbContextAsync()
+    {
+        // Quanto for executado pela primeira vez deve esperar a restauração acontecer.
+        await CheckForStartupTaskAsync();
+
+        // Aqui pegamos o contexto do banco de dados.
+        var dbContext = await _dbContextFactory.CreateDbContextAsync();
+
+        if (!_init)
+        {
+            // quando executado pela primeira vez, devemos criar o banco de dados.
+            await dbContext.Database.EnsureCreatedAsync();
+            _init = true;
+        }
+
+        // Aqui vamos monitorar sempre que o saved changes for chamado sincronizar e fechar a conexão com o banco de dados.
+        dbContext.SavedChanges += (_, e) => DbContextSavedChanges(dbContext, e);
+
+        return dbContext;
+    }
+    
+    public static string? GetFilenameForType() =>
+        FileNames.ContainsKey(typeof(TContext)) ? FileNames[typeof(TContext)] : null;
+
+    private void DoSwap(string source, string target) =>
+        _dbSwapService.DoSwap(source, target);
+
+    private string GetFilename()
+    {
+        using var dbContext = _dbContextFactory.CreateDbContext();
+        var filename = "fileNotFound.db";
+        var type = dbContext.GetType();
+        if (FileNames.ContainsKey(type))
+        {
+            return FileNames[type];
+        }
+
+        var connectionString = dbContext.Database.GetConnectionString();
+
+        var file = connectionString
+            ?.Split(';')
+            .Select(s => s.Split('='))
+            .Select(split => new
+            {
+                key = split[0].ToLowerInvariant(),
+                value = split[1],
+            })
+            .Where(kv => kv.key.Contains("data source") ||
+                         kv.key.Contains("datasource") ||
+                         kv.key.Contains("filename")
+            )
+            .Select(kv => kv.value)
+            .FirstOrDefault();
+        
+        if (file is not null)
+        {
+            filename = file;
+        }
+
+        FileNames.Add(type, filename);
+        return filename;
+    }
+
+    private async Task CheckForStartupTaskAsync()
+    {
+        if (_startupTask is not null)
+        {
+            _lastStatus = await _startupTask;
+            _startupTask.Dispose();
+            _startupTask = null;
+        }
+    }
+
+    private async void DbContextSavedChanges(TContext ctx, SavedChangesEventArgs e)
+    {
+        await ctx.Database.CloseConnectionAsync();
+        await CheckForStartupTaskAsync();
+        if (e.EntitiesSavedCount <= 0) return;
+        
+        // exclusivo para evitar conflitos. É excluído após o cache.
+        var backupName = $"{BackupFile}-{Guid.NewGuid().ToString().Split('-')[0]}";
+        DoSwap(Filename, backupName);
+        _lastStatus = await _dbStorageService.SyncDatabaseAsync(backupName);
+    }
+
+    private async Task<int> RestoreAsync()
+    {
+        var filename = $"{GetFilename()}_backup";
+        _lastStatus = await _dbStorageService.SyncDatabaseAsync(filename);
+        if (_lastStatus is 0)
+        {
+            DoSwap(filename, FileNames[typeof(TContext)]);
+        }
+
+        return _lastStatus;
+    }
+}
+````
