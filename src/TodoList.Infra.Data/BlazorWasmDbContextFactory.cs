@@ -59,7 +59,7 @@ public class BlazorWasmDbContextFactory<TContext> : IBlazorWasmDbContextFactory<
     private string GetFilename()
     {
         using var dbContext = _dbContextFactory.CreateDbContext();
-        var filename = "fileNotFound.db";
+        var filename = "filenotfound.db";
         var type = dbContext.GetType();
         if (FileNames.ContainsKey(type))
         {

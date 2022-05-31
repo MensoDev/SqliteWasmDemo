@@ -1,0 +1,49 @@
+﻿@page "/Todos"
+@using TodoList.Domain.Entities
+@using TodoList.Domain.Repositories
+@inject ITodoRepository TodoRepository
+
+<MudText Typo="Typo.h4">Todos</MudText>
+
+@if (_loadingData is false)
+{
+    <MudPaper Width="700px">
+        <MudList Clickable="true">
+            <MudListSubheader>
+                Todo List Items
+            </MudListSubheader>
+            @foreach (var todo in _items)
+            {
+                <MudListItem Icon="@GetCompletedOrNotComplectedTaskIcon(todo)">
+                    @todo.Title | @todo.Description
+                </MudListItem>
+            }
+        </MudList>
+    </MudPaper>
+}
+else
+{
+    <MudProgressCircular Color="Color.Primary" Indeterminate="true"/>
+}
+
+@code {
+    private IEnumerable<Todo> _items = Enumerable.Empty<Todo>();
+    private bool _loadingData; 
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTodosAsync();
+    }
+
+    private async Task LoadTodosAsync()
+    {
+        _loadingData = true;
+        _items = await TodoRepository.GetAllAsync();
+        _loadingData = false;
+    }
+    
+    private string GetCompletedOrNotComplectedTaskIcon(Todo todo)
+    {
+        return todo.Completed ? Icons.Material.Filled.RadioButtonChecked : Icons.Material.Filled.RadioButtonUnchecked;
+    }
+}

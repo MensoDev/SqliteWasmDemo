@@ -10,14 +10,14 @@ public class BrowserCacheDatabaseStorageService : IDatabaseStorageService, IAsyn
     public BrowserCacheDatabaseStorageService(IJSRuntime jsRuntime)
     {
         _moduleTask = new Lazy<Task<IJSObjectReference>>(() => jsRuntime.InvokeAsync<IJSObjectReference>(
-                "import", $"./_content/Todo.Infra.Data/browserCacheDatabaseStorageService.js" ).AsTask()
+                "import", $"./_content/TodoList.Infra.Data/browserCacheDatabaseStorageService.js" ).AsTask()
         );
     }
     
     public async Task<int> SyncDatabaseAsync(string filename)
     {
         var module = await _moduleTask.Value;
-        return await module.InvokeAsync<int>("syncDatabaseWithStorageAsync", filename);
+        return await module.InvokeAsync<int>("syncDatabaseWithBrowserCacheAsync", filename);
     }
 
     public async Task<string> GenerateDownloadLinkAsync(string filename)
