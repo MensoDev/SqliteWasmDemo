@@ -509,6 +509,58 @@ public class BlazorWasmDbContextFactory<TContext> : IBlazorWasmDbContextFactory<
     }
 }
 ```
+Agora vamos realizar a implementação da interface ITodoRepository, note que aqui vamos ver algo um pouco diferente de implementações de repositories comuns que usam o EntityFrameworkCore no background.
+
+```csharp
+using Microsoft.EntityFrameworkCore;
+using TodoList.Domain.Entities;
+using TodoList.Domain.Repositories;
+using TodoList.Infra.Data.Services;
+
+namespace TodoList.Infra.Data.Repositories;
+
+public class TodoRepository : ITodoRepository
+{
+    private readonly IBlazorWasmDbContextFactory<TodoListDbContext> _contextFactory;
+
+    public TodoRepository(IBlazorWasmDbContextFactory<TodoListDbContext> contextFactory)
+    {
+        _contextFactory = contextFactory;
+    }
+    
+    public async ValueTask<IEnumerable<Todo>> GetAllAsync()
+    {
+        await using var dbContext = await _contextFactory.CreateDbContextAsync();
+
+        if (dbContext.Todos.Any()) return await dbContext.Todos.ToListAsync();
+        
+        await dbContext.Todos.AddAsync(new Todo($"First task added on {DateTime.Now}", "First task"));
+        await dbContext.SaveChangesAsync();
+
+        return await dbContext.Todos.ToListAsync();
+    }
+
+    public ValueTask<Todo> GetByIdAsync(Guid id)
+    {
+        throw new NotImplementedException();
+    }
+
+    public ValueTask RegisterAsync(Todo todo)
+    {
+        throw new NotImplementedException();
+    }
+
+    public void Update(Todo todo)
+    {
+        throw new NotImplementedException();
+    }
+
+    public void Remove(Todo todo)
+    {
+        throw new NotImplementedException();
+    }
+}
+```
 
 Ok, para facilitar e ser mais eficiente vamos criar um extensions method para registrar esses serviços no contêiner de injeção de dependência de serviços (DI).
 
@@ -574,4 +626,38 @@ Vamos precisar de algumas dependência e referenciar o projeto de acesso a dados
 - [MudBlazor](https://www.nuget.org/packages/MudBlazor): dotnet add package MudBlazor
 
 Quanto a implementação do MudBlazor não vou me deter a isso aqui neste artigo, caso tenha interesse você pode olhar a documentação, caso não queira você pode, implementar na mão as paginas e componentes ou utilizar outro Framework conforme seu gosto e interesse!
+
+Na classe Program vamos precisar de alguns ajustes simples que sera basicamente injetar os serviços que iremos utilizar.
+
+```csharp
+builder.Services.AddBlazorWasmDatabaseContextFactory<TodoListDbContext>(options =>
+    options.UseSqlite("Data Source=todolist.sqlite3"));
+```
+
+A classe Program ficara basicamente assim apos o ajuste
+
+```csharp
+using Microsoft.AspNetCore.Components.Web;
+using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
+using Microsoft.EntityFrameworkCore;
+using MudBlazor.Services;
+using TodoList.Infra.Data;
+using TodoList.Infra.Data.Extensions;
+using TodoList.Presentation;
+
+var builder = WebAssemblyHostBuilder.CreateDefault(args);
+builder.RootComponents.Add<App>("#app");
+builder.RootComponents.Add<HeadOutlet>("head::after");
+
+builder.Services.AddScoped(sp => new HttpClient {BaseAddress = new Uri(builder.HostEnvironment.BaseAddress)});
+
+builder.Services.AddMudServices();
+
+builder.Services.AddBlazorWasmDatabaseContextFactory<TodoListDbContext>(options =>
+    options.UseSqlite("Data Source=todolist.sqlite3"));
+
+await builder.Build().RunAsync();
+```
+
+Vamos criar uma página para listar nossos todos! Ela ficara basicamente assim!
 

@@ -1,25 +1,29 @@
-﻿export async function  syncDatabaseWithBrowserCache(filename) {   
+﻿export async function  syncDatabaseWithBrowserCacheAsync(file) {
     window.blazorWasmDatabase = window.blazorWasmDatabase || {
         init: false,
-        cache: await caches.open('blazorWasmDatabase')
+        cache: await caches.open('blazorWasmDatabaseCache')
     };
     
-    const backupPath = `/backup/database/${filename}`;
-    const cachePath = `/cache/database/${filename.substring(0, filename.indexOf('_backup'))}`;
-    
+    const backupPath = `/${file}`;
+    const cachePath = `/cache/database/${file.substring(0, file.indexOf('_backup'))}`;
+
     if (!window.blazorWasmDatabase.init) {
+
         window.blazorWasmDatabase.init = true;
-        
+
         const cacheResponse = await window.blazorWasmDatabase.cache.match(cachePath);
-        if(cacheResponse && cacheResponse.ok) {
-            const cacheResponseArrayBuffer = await cacheResponse.arrayBuffer();
-            if(cacheResponseArrayBuffer){
-                console.log(`Restoring ${cacheResponseArrayBuffer.byteLength} bytes`);
-                FS.writeFile(backupPath, new Uint8Array(cacheResponseArrayBuffer));
+
+        if (cacheResponse && cacheResponse.ok) {
+
+            const buffer = await cacheResponse.arrayBuffer();
+
+            if (buffer) {
+                console.log(`Restoring ${buffer.byteLength} bytes.`);
+                FS.writeFile(backupPath, new Uint8Array(buffer));
                 return 0;
             }
         }
-        return  -1;
+        return -1;
     }
 
     if (FS.analyzePath(backupPath).exists) {
@@ -52,7 +56,7 @@
 
         return 1;
     }
-    return -1;    
+    return -1;
 }
 
 export async function generateDownloadLinkAsync(filename) {    
