@@ -20,23 +20,30 @@ public class TodoRepository : ITodoRepository
         return await dbContext.Todos.ToListAsync();
     }
 
-    public ValueTask<Todo> GetByIdAsync(Guid id)
+    public async ValueTask<Todo?> GetByIdAsync(Guid id)
     {
-        throw new NotImplementedException();
+        await using var dbContext = await _contextFactory.CreateDbContextAsync();
+        return await dbContext.Todos.FirstOrDefaultAsync(todo => todo.Id == id);
     }
 
-    public ValueTask RegisterAsync(Todo todo)
+    public async ValueTask RegisterAsync(Todo todo)
     {
-        throw new NotImplementedException();
+        await using var dbContext = await _contextFactory.CreateDbContextAsync();
+        dbContext.Todos.Add(todo);
+        await dbContext.SaveChangesAsync();
     }
 
-    public void Update(Todo todo)
+    public async ValueTask UpdateAsync(Todo todo)
     {
-        throw new NotImplementedException();
+        await using var dbContext = await _contextFactory.CreateDbContextAsync();
+        dbContext.Todos.Update(todo);
+        await dbContext.SaveChangesAsync();
     }
 
-    public void Remove(Todo todo)
+    public async ValueTask RemoveAsync(Todo todo)
     {
-        throw new NotImplementedException();
+        await using var dbContext = await _contextFactory.CreateDbContextAsync();
+        dbContext.Todos.Remove(todo);
+        await dbContext.SaveChangesAsync();
     }
 }

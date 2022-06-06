@@ -5,11 +5,11 @@ namespace TodoList.Domain.Repositories;
 public interface ITodoRepository
 {
     ValueTask<IEnumerable<Todo>> GetAllAsync();
-    ValueTask<Todo> GetByIdAsync(Guid id);
+    ValueTask<Todo?> GetByIdAsync(Guid id);
     
     ValueTask RegisterAsync(Todo todo);
     
-    void Update(Todo todo);
+    ValueTask UpdateAsync(Todo todo);
     
-    void Remove(Todo todo);
+    ValueTask RemoveAsync(Todo todo);
 }

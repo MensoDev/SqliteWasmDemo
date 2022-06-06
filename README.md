@@ -38,12 +38,12 @@ Aqui está os projetos que vamos precisamos criar, que, basicamente vão ser tr�
 
 **Domain:** Esse projeto é simples e conterá nossas _entidades_ e nossas _interfaces_ de repositório, em projetos reais ele poderia ser bem mais complexo, mas não necessitamos disso, nessa demostração!
 
-**Data:** Aqui teremos basicamente tudo que será necessário para podermos usar de fato o _EntityFrameworkCore_ com o _SQLite_ no navegador com o _Blazor Web Assembly_.
+**Data:** Aqui teremos basicamente tudo que será necessário para podermos usar de fato o _EntityFrameworkCore_ com o _SQLite_ no navegador com o _Blazor Web Assembly_. Por isso o tipo de projeto sera razorclasslib.
 
 **Presentation:** Esse projeto será nada de mais, apenas algumas paginas para testarmos e utilizarmos os serviços de acesso e gerência do banco de dados por meio do _EntityFrameworkCore_.
 
 > **NOTA:**
-> #### Vamos usar basicamente o CLI do dotNET para tornar este artigo replicável nas plataformas suportadas pelo dotNET, como, por exemplo, nos ecos sistemas macOS, Linux ou Windows, com seu editor de código ou IDE preferida sem problemas de compatibilidade.
+> #### Vamos usar basicamente o CLI do dotNET para tornar este artigo replicável nas plataformas suportadas pelo dotNET, como, por exemplo, nos ecos sistemas macOS, Linux ou Windows, com seu editor de código ou IDE preferido sem problemas de compatibilidade. 
 
 ## 1. Entendendo o projeto
 
@@ -659,5 +659,150 @@ builder.Services.AddBlazorWasmDatabaseContextFactory<TodoListDbContext>(options 
 await builder.Build().RunAsync();
 ```
 
-Vamos criar uma página para listar nossos todos! Ela ficara basicamente assim!
+Vamos criar uma página para listar nossos todos! Ela ficara assim!
 
+```csharp
+@page "/Todos"
+@using TodoList.Domain.Entities
+@using TodoList.Domain.Repositories
+@inject ITodoRepository TodoRepository
+@inject IDialogService DialogService
+
+<MudText Typo="Typo.h4">Todos</MudText>
+
+<MudButton Class="mt-4" @onclick="OpenDialog" Variant="Variant.Filled" Color="Color.Primary">
+    Add Todo Item
+</MudButton>
+
+<MudDivider Class="mt-4 mb-4" DividerType="DividerType.FullWidth"></MudDivider>
+
+@if (_loadingData is false)
+{
+    <MudPaper Width="700px">
+        <MudList Dense="true">
+            @foreach (var todo in _items)
+            {
+                <MudListItem Icon="@GetCompletedOrNotComplectedTaskIcon(todo)">
+
+                    <div class="d-inline">
+                        <MudText Typo="Typo.h6">@todo.Title</MudText>
+                        <MudText Typo="Typo.subtitle1">@todo.Description</MudText>
+                    </div>
+                    
+                    <MudButton Color="Color.Primary" Variant="Variant.Outlined" OnClick="() => RemoveTodoAsync(todo)">Remove</MudButton>
+                    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="() => OnTodoItemClicked(todo)">
+                        @GetDoneOrUndoneMessage(todo)
+                    </MudButton>
+
+                </MudListItem>
+                <MudDivider DividerType="DividerType.Inset"/>
+            }
+        </MudList>
+    </MudPaper>
+}
+else
+{
+    <MudProgressCircular Color="Color.Primary" Indeterminate="true"/>
+}
+
+@code {
+    private IEnumerable<Todo> _items = Enumerable.Empty<Todo>();
+    private bool _loadingData;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTodosAsync();
+    }
+
+    private async Task LoadTodosAsync()
+    {
+        _loadingData = true;
+        _items = await TodoRepository.GetAllAsync();
+        _loadingData = false;
+    }
+
+    private string GetCompletedOrNotComplectedTaskIcon(Todo todo)
+    {
+        return todo.Done ? Icons.Material.Filled.RadioButtonChecked : Icons.Material.Filled.RadioButtonUnchecked;
+    }
+    
+    private string GetDoneOrUndoneMessage(Todo todo)
+    {
+        return todo.Done ? "Undone" : "Done";
+    }
+
+    private async Task RemoveTodoAsync(Todo todo)
+    {
+        await TodoRepository.RemoveAsync(todo);
+        await LoadTodosAsync();
+    }
+
+    private async Task OnTodoItemClicked(Todo todo)
+    {
+        if (todo.Done) todo.MarkAsUndone();
+        else todo.MarkAsDone();
+
+        await TodoRepository.UpdateAsync(todo);
+        await LoadTodosAsync();
+    }
+
+    private async Task OpenDialog()
+    {
+        var options = new DialogOptions {CloseOnEscapeKey = true};
+        var dialog = DialogService.Show<CreateTodoDialog>("Create Todo Item", options);
+        var result = await dialog.Result;
+
+        if (!result.Cancelled)
+        {
+            await LoadTodosAsync();
+        }
+    }
+
+}
+```
+
+E um componente simples para registro de novos todos
+
+```csharp
+@using TodoList.Domain.Entities
+@using TodoList.Domain.Repositories
+@inject ITodoRepository TodoRepository
+<MudDialog>
+    <DialogContent>
+
+        <MudPaper Class="pa-4">
+            <MudForm @ref="form" @bind-IsValid="@success">
+                <MudTextField T="string" Label="Title" Variant="Variant.Outlined" @bind-Text="title" Required="true" RequiredError="Title is required!"/>
+                <MudTextField T="string" Label="Description" Variant="Variant.Outlined" @bind-Text="description" Required="true" RequiredError="Description is required" Lines="3"/>
+            </MudForm>
+        </MudPaper>
+
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!success)" OnClick="Submit">Submit</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+
+    [CascadingParameter]
+    MudDialogInstance MudDialog { get; set; }
+
+    MudForm form;
+    bool success;
+    string title;
+    string description;
+
+    void Cancel() => MudDialog.Cancel();
+
+    private async void Submit()
+    {
+        if (!success) return;
+        
+        var todo = new Todo(title, description);
+        await TodoRepository.RegisterAsync(todo);
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+}
+```

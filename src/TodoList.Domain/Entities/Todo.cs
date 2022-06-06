@@ -7,16 +7,21 @@ public class Todo
         Id = Guid.NewGuid();
         Title = title;
         Description = description;
-        Completed = false;
+        Done = false;
     }
 
     public Guid Id { get; private set; }
     public string Title { get; private set; }
     public string Description { get; private set; }
-    public bool Completed { get; private set; }
+    public bool Done { get; private set; }
     
-    public void MarkAsCompleted()
+    public void MarkAsDone()
     {
-        Completed = true;
+        Done = true;
+    }
+    
+    public void MarkAsUndone()
+    {
+        Done = false;
     }
 }

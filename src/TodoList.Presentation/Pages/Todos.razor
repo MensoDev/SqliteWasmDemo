@@ -2,21 +2,36 @@
 @using TodoList.Domain.Entities
 @using TodoList.Domain.Repositories
 @inject ITodoRepository TodoRepository
+@inject IDialogService DialogService
 
 <MudText Typo="Typo.h4">Todos</MudText>
+
+<MudButton Class="mt-4" @onclick="OpenDialog" Variant="Variant.Filled" Color="Color.Primary">
+    Add Todo Item
+</MudButton>
+
+<MudDivider Class="mt-4 mb-4" DividerType="DividerType.FullWidth"></MudDivider>
 
 @if (_loadingData is false)
 {
     <MudPaper Width="700px">
-        <MudList Clickable="true">
-            <MudListSubheader>
-                Todo List Items
-            </MudListSubheader>
+        <MudList Dense="true">
             @foreach (var todo in _items)
             {
                 <MudListItem Icon="@GetCompletedOrNotComplectedTaskIcon(todo)">
-                    @todo.Title | @todo.Description
+
+                    <div class="d-inline">
+                        <MudText Typo="Typo.h6">@todo.Title</MudText>
+                        <MudText Typo="Typo.subtitle1">@todo.Description</MudText>
+                    </div>
+                    
+                    <MudButton Color="Color.Primary" Variant="Variant.Outlined" OnClick="() => RemoveTodoAsync(todo)">Remove</MudButton>
+                    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="() => OnTodoItemClicked(todo)">
+                        @GetDoneOrUndoneMessage(todo)
+                    </MudButton>
+
                 </MudListItem>
+                <MudDivider DividerType="DividerType.Inset"/>
             }
         </MudList>
     </MudPaper>
@@ -28,7 +43,7 @@ else
 
 @code {
     private IEnumerable<Todo> _items = Enumerable.Empty<Todo>();
-    private bool _loadingData; 
+    private bool _loadingData;
 
     protected override async Task OnInitializedAsync()
     {
@@ -41,9 +56,42 @@ else
         _items = await TodoRepository.GetAllAsync();
         _loadingData = false;
     }
-    
+
     private string GetCompletedOrNotComplectedTaskIcon(Todo todo)
     {
-        return todo.Completed ? Icons.Material.Filled.RadioButtonChecked : Icons.Material.Filled.RadioButtonUnchecked;
+        return todo.Done ? Icons.Material.Filled.RadioButtonChecked : Icons.Material.Filled.RadioButtonUnchecked;
     }
+    
+    private string GetDoneOrUndoneMessage(Todo todo)
+    {
+        return todo.Done ? "Undone" : "Done";
+    }
+
+    private async Task RemoveTodoAsync(Todo todo)
+    {
+        await TodoRepository.RemoveAsync(todo);
+        await LoadTodosAsync();
+    }
+
+    private async Task OnTodoItemClicked(Todo todo)
+    {
+        if (todo.Done) todo.MarkAsUndone();
+        else todo.MarkAsDone();
+
+        await TodoRepository.UpdateAsync(todo);
+        await LoadTodosAsync();
+    }
+
+    private async Task OpenDialog()
+    {
+        var options = new DialogOptions {CloseOnEscapeKey = true};
+        var dialog = DialogService.Show<CreateTodoDialog>("Create Todo Item", options);
+        var result = await dialog.Result;
+
+        if (!result.Cancelled)
+        {
+            await LoadTodosAsync();
+        }
+    }
+
 }

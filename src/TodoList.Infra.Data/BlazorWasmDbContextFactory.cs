@@ -6,7 +6,7 @@ namespace TodoList.Infra.Data;
 public class BlazorWasmDbContextFactory<TContext> : IBlazorWasmDbContextFactory<TContext>
     where TContext : DbContext
 {
-    private static readonly IDictionary<Type, string> FileNames = new Dictionary<Type, string>();
+    private static readonly IDictionary<Type, string> Filenames = new Dictionary<Type, string>();
     
     private readonly IDbContextFactory<TContext> _dbContextFactory;
     private readonly IDatabaseStorageService _dbStorageService;
@@ -26,7 +26,7 @@ public class BlazorWasmDbContextFactory<TContext> : IBlazorWasmDbContextFactory<
         _startupTask = RestoreAsync();
     }
     
-    private static string Filename => FileNames[typeof(TContext)];
+    private static string Filename => Filenames[typeof(TContext)];
     private static string BackupFile => $"{Filename}_backup";
 
     public async Task<TContext> CreateDbContextAsync()
@@ -51,7 +51,7 @@ public class BlazorWasmDbContextFactory<TContext> : IBlazorWasmDbContextFactory<
     }
     
     public static string? GetFilenameForType() =>
-        FileNames.ContainsKey(typeof(TContext)) ? FileNames[typeof(TContext)] : null;
+        Filenames.ContainsKey(typeof(TContext)) ? Filenames[typeof(TContext)] : null;
 
     private void DoSwap(string source, string target) =>
         _dbSwapService.DoSwap(source, target);
@@ -61,9 +61,9 @@ public class BlazorWasmDbContextFactory<TContext> : IBlazorWasmDbContextFactory<
         using var dbContext = _dbContextFactory.CreateDbContext();
         var filename = "filenotfound.db";
         var type = dbContext.GetType();
-        if (FileNames.ContainsKey(type))
+        if (Filenames.ContainsKey(type))
         {
-            return FileNames[type];
+            return Filenames[type];
         }
 
         var connectionString = dbContext.Database.GetConnectionString();
@@ -88,7 +88,7 @@ public class BlazorWasmDbContextFactory<TContext> : IBlazorWasmDbContextFactory<
             filename = file;
         }
 
-        FileNames.Add(type, filename);
+        Filenames.Add(type, filename);
         return filename;
     }
 
@@ -120,7 +120,7 @@ public class BlazorWasmDbContextFactory<TContext> : IBlazorWasmDbContextFactory<
         _lastStatus = await _dbStorageService.SyncDatabaseAsync(filename);
         if (_lastStatus is 0)
         {
-            DoSwap(filename, FileNames[typeof(TContext)]);
+            DoSwap(filename, Filenames[typeof(TContext)]);
         }
 
         return _lastStatus;

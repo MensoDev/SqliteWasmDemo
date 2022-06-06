@@ -1,0 +1,41 @@
+﻿@using TodoList.Domain.Entities
+@using TodoList.Domain.Repositories
+@inject ITodoRepository TodoRepository
+<MudDialog>
+    <DialogContent>
+
+        <MudPaper Class="pa-4">
+            <MudForm @ref="form" @bind-IsValid="@success">
+                <MudTextField T="string" Label="Title" Variant="Variant.Outlined" @bind-Text="title" Required="true" RequiredError="Title is required!"/>
+                <MudTextField T="string" Label="Description" Variant="Variant.Outlined" @bind-Text="description" Required="true" RequiredError="Description is required" Lines="3"/>
+            </MudForm>
+        </MudPaper>
+
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!success)" OnClick="Submit">Submit</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+
+    [CascadingParameter]
+    MudDialogInstance MudDialog { get; set; }
+
+    MudForm form;
+    bool success;
+    string title;
+    string description;
+
+    void Cancel() => MudDialog.Cancel();
+
+    private async void Submit()
+    {
+        if (!success) return;
+        
+        var todo = new Todo(title, description);
+        await TodoRepository.RegisterAsync(todo);
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+}
