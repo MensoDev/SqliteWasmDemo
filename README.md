@@ -621,8 +621,6 @@ public static class ServiceCollectionExtensions
 }
 ```
 
-A partir daqui podemos começar a implementar o front, será algo simples e vamos utilizar o [MudBlazor](https://mudblazor.com/docs/overview) para otimizar nosso tempo e esforço!
-
 ### 4. Implementação da Apresentação
 
 Vamos precisar de algumas referencias ao projeto de acesso a dados e o projeto de domínio.
@@ -658,4 +656,6 @@ Basicamente só precisamos injetar no componente que quisermos o repositório e 
 @inject ITodoRepository TodoRepository
 ```
 
-Com isso basicamente já temos tudo implementado, basta seguir com usa imaginação e construir aplicações.
+Com isso basicamente já temos tudo implementado, basta seguir com usa imaginação e construir aplicações, é valido reforçar que o banco de dados no navegador pode ser facilmente acessado, não tem muita segurança quanto a isso, siga com cautela com o que vai ser armazenado nele.
+
+Uma demostração dessa implementação pode ser encontrada no meu [GitHub](https://github.com/MensoDev/SqliteWasmDemo).
