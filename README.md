@@ -28,7 +28,7 @@ Primeiro precisamos criar a solução conforme exemplo a baixo:
 dotnet new sln -n TodoList
 ```
 
-Aqui está os projetos que vamos precisamos criar, que, basicamente vão ser três, sendo  eles, de Domínio, acesso a Dados e UI! Abaixo temos os comandos de exemplo para criar os projetos, você pode alterá-los conforme seu gosto, ou usar algum recurso visual de sua IDE, mas você deve respeitar os tipos informados!
+Aqui está os projetos que vamos precisamos criar, que, basicamente vão ser três, sendo  eles, de Domínio, Acesso a Dados e UI! Abaixo temos os comandos de exemplo para criar os projetos, você pode alterá-los conforme seu gosto, ou usar algum recurso visual de sua IDE, mas você deve respeitar os tipos informados!
 
 | Nome do projeto              | Tipo          | Comando                                                 |
 |------------------------------|---------------|---------------------------------------------------------|
@@ -47,7 +47,7 @@ Aqui está os projetos que vamos precisamos criar, que, basicamente vão ser tr�
 
 ## 1. Entendendo o projeto
 
-Basicamente estamos criando um  aplicativo que fara a gerenciamento de tarefas, podendo adicionar, atualizar excluir e editar as tarefas conforme a necessidade do usuário, e de extra ele pode fazer o download do banco de dados atual!
+Basicamente estamos criando um  aplicativo que fara a gerenciamento de tarefas, podendo adicionar, atualizar excluir e editar as tarefas conforme a necessidade do usuário, e de extra ele pode fazer o download do banco de dados atual, não vamos nos deter a parte visual.
 
 ## 2. Implementando o domínio
 
@@ -122,7 +122,7 @@ Vamos precisar instalar os seguintes pacotes e referenciar o projeto de domínio
 
 O `SQLitePCLRaw.bundle_e_sqlite3` faz magica por trás dos panos, ele é responsável por fornecer e/ou criar a biblioteca SQLite nativa, correta e específica para cada plataforma alvo. Isso é essencialmente o mesmo que se você enviar manualmente um binário específico para cada plataforma como, por exemplo, `sqlite3.dll` para o Windows e `sqlite3.so` para Linux, e como estamos mirando o WebAssembly, a implementação C do SQLite precisa ser compilada para essa plataforma.
 
-> TODO: Pegar um print do sqlite3.a/sqlite3.so etc...
+![s_sqlite3 a_gerado](https://user-images.githubusercontent.com/36675712/177378987-d94459d4-f88d-4838-bb43-da6e56756959.png)
 
 Este é um mecanismo completo para o banco de dado SQLite, pronto para ser carregado no navegador e para ser executado no tempo de execução do Wasm. Com isso, nosso aplicativo Blazor Web Assembly pode usar o EntityFrameworkCore para falar diretamente com um banco de dados SQLite real e incorporado no navegador.
 
@@ -130,6 +130,12 @@ Também precisamos editar o arquivo `.csproject` do projeto de acesso a dados pa
 
 ```xml
 <WasmNativeBuild>true</WasmNativeBuild>
+```
+
+```xml
+<PropertyGroup Condition="'$(Configuration)'=='Release'">
+	<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+</PropertyGroup>
 ```
 
 Com isso o `.csproject` do projeto de acesso a dado ficara algo como isso
@@ -200,7 +206,7 @@ public interface IDatabaseStorageService
 }
 ```
 
-Poderíamos talvez armazenar o banco de dados ou pelo menos um backup dele em alguma nuvem privada do usuário como, por exemplo, Google Drive ou OneDrive, etc., mas para deixar esse artigo o mais simples possível vamos salvar o banco no cache do navegador.
+Poderíamos talvez, armazenar o banco de dados ou pelo menos um backup dele em alguma nuvem privada do usuário como, por exemplo, Google Drive ou OneDrive, etc., mas para deixar esse artigo o mais simples possível vamos salvar o banco no cache do navegador.
 
 Neste ponto teremos que usar um pouco de JavaScript para poder acessar o cache do navegador, pois o Blazor Web Assembly ainda não consegui fazer isso diretamente!
 
@@ -327,7 +333,7 @@ public class BrowserCacheDatabaseStorageService : IDatabaseStorageService, IAsyn
 ```
 Todo esse código é bastante simples, ele vai sincronizar o banco de dados com o cache do navegador, e de extra vai gerar um link para download do banco de dados!
 
-Também vamos precisar de um serviço para fazer Swap do banco de dados legado pelo atual, ou seja, basicamente ele vai trocar o banco de dados ativo pelo backup!
+Também vamos precisar de um serviço para fazer Swap do banco de dados vazio pelo do cache, ou seja, basicamente ele vai trocar o banco de dados ativo pelo backup!
 
 ```csharp
 namespace TodoList.Infra.Data.Services;
@@ -363,7 +369,7 @@ public class DatabaseSwapService : IDatabaseSwapService
 }
 ```
 
-Feito isso, vamos precisar criar um BlazorWasmDbContextFactory (`IBlazorWasmDbContextFactory`) que basicamente ele vai orquestrar os serviços de Storage e Swap. Ele espera até que o banco de dados seja restaurado  para retorna contexto do EntityFrameworkCore criado, e faz o backup do banco de dados quanto ocorre salvamentos bem-sucedidos, a baixo tenho um exemplo de código para isso, vale ressaltar ser um exemplo e pode ser que o código não esteja em uma boa forma!
+Feito isso, vamos precisar criar um BlazorWasmDbContextFactory (`IBlazorWasmDbContextFactory`) que basicamente ele vai orquestrar os serviços de Storage e Swap. Ele espera até que o banco de dados seja restaurado para retorna contexto do EntityFrameworkCore criado, e faz o backup do banco de dados quanto ocorre salvamentos bem-sucedidos, a baixo tenho um exemplo de código para isso, vale ressaltar ser um exemplo e pode ser que o código não esteja em uma boa forma!
 
 ```csharp
 using Microsoft.EntityFrameworkCore;
@@ -531,33 +537,34 @@ public class TodoRepository : ITodoRepository
     public async ValueTask<IEnumerable<Todo>> GetAllAsync()
     {
         await using var dbContext = await _contextFactory.CreateDbContextAsync();
-
-        if (dbContext.Todos.Any()) return await dbContext.Todos.ToListAsync();
-        
-        await dbContext.Todos.AddAsync(new Todo($"First task added on {DateTime.Now}", "First task"));
-        await dbContext.SaveChangesAsync();
-
         return await dbContext.Todos.ToListAsync();
     }
 
-    public ValueTask<Todo> GetByIdAsync(Guid id)
+    public async ValueTask<Todo?> GetByIdAsync(Guid id)
     {
-        throw new NotImplementedException();
+        await using var dbContext = await _contextFactory.CreateDbContextAsync();
+        return await dbContext.Todos.FirstOrDefaultAsync(todo => todo.Id == id);
     }
 
-    public ValueTask RegisterAsync(Todo todo)
+    public async ValueTask RegisterAsync(Todo todo)
     {
-        throw new NotImplementedException();
+        await using var dbContext = await _contextFactory.CreateDbContextAsync();
+        dbContext.Todos.Add(todo);
+        await dbContext.SaveChangesAsync();
     }
 
-    public void Update(Todo todo)
+    public async ValueTask UpdateAsync(Todo todo)
     {
-        throw new NotImplementedException();
+        await using var dbContext = await _contextFactory.CreateDbContextAsync();
+        dbContext.Todos.Update(todo);
+        await dbContext.SaveChangesAsync();
     }
 
-    public void Remove(Todo todo)
+    public async ValueTask RemoveAsync(Todo todo)
     {
-        throw new NotImplementedException();
+        await using var dbContext = await _contextFactory.CreateDbContextAsync();
+        dbContext.Todos.Remove(todo);
+        await dbContext.SaveChangesAsync();
     }
 }
 ```
@@ -617,7 +624,7 @@ public static class ServiceCollectionExtensions
 
 A partir daqui podemos começar a implementar o front, será algo simples e vamos utilizar o [MudBlazor](https://mudblazor.com/docs/overview) para otimizar nosso tempo e esforço!
 
-### 4. Implementação do Front
+### 4. Implementação da Apresentação
 
 Vamos precisar de algumas dependência e referenciar o projeto de acesso a dados e o projeto de domínio.
 
@@ -637,172 +644,20 @@ builder.Services.AddBlazorWasmDatabaseContextFactory<TodoListDbContext>(options 
 A classe Program ficara basicamente assim apos o ajuste
 
 ```csharp
-using Microsoft.AspNetCore.Components.Web;
-using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
-using Microsoft.EntityFrameworkCore;
-using MudBlazor.Services;
-using TodoList.Infra.Data;
-using TodoList.Infra.Data.Extensions;
-using TodoList.Presentation;
-
-var builder = WebAssemblyHostBuilder.CreateDefault(args);
-builder.RootComponents.Add<App>("#app");
-builder.RootComponents.Add<HeadOutlet>("head::after");
-
-builder.Services.AddScoped(sp => new HttpClient {BaseAddress = new Uri(builder.HostEnvironment.BaseAddress)});
-
-builder.Services.AddMudServices();
 
 builder.Services.AddBlazorWasmDatabaseContextFactory<TodoListDbContext>(options =>
     options.UseSqlite("Data Source=todolist.sqlite3"));
 
-await builder.Build().RunAsync();
 ```
 
 Vamos criar uma página para listar nossos todos! Ela ficara assim!
 
-```csharp
-@page "/Todos"
-@using TodoList.Domain.Entities
-@using TodoList.Domain.Repositories
-@inject ITodoRepository TodoRepository
-@inject IDialogService DialogService
+![todo-items](https://user-images.githubusercontent.com/36675712/177382267-a285f94d-2ac2-435e-9df8-888e8b1eeb35.png)
 
-<MudText Typo="Typo.h4">Todos</MudText>
-
-<MudButton Class="mt-4" @onclick="OpenDialog" Variant="Variant.Filled" Color="Color.Primary">
-    Add Todo Item
-</MudButton>
-
-<MudDivider Class="mt-4 mb-4" DividerType="DividerType.FullWidth"></MudDivider>
-
-@if (_loadingData is false)
-{
-    <MudPaper Width="700px">
-        <MudList Dense="true">
-            @foreach (var todo in _items)
-            {
-                <MudListItem Icon="@GetCompletedOrNotComplectedTaskIcon(todo)">
-
-                    <div class="d-inline">
-                        <MudText Typo="Typo.h6">@todo.Title</MudText>
-                        <MudText Typo="Typo.subtitle1">@todo.Description</MudText>
-                    </div>
-                    
-                    <MudButton Color="Color.Primary" Variant="Variant.Outlined" OnClick="() => RemoveTodoAsync(todo)">Remove</MudButton>
-                    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="() => OnTodoItemClicked(todo)">
-                        @GetDoneOrUndoneMessage(todo)
-                    </MudButton>
-
-                </MudListItem>
-                <MudDivider DividerType="DividerType.Inset"/>
-            }
-        </MudList>
-    </MudPaper>
-}
-else
-{
-    <MudProgressCircular Color="Color.Primary" Indeterminate="true"/>
-}
-
-@code {
-    private IEnumerable<Todo> _items = Enumerable.Empty<Todo>();
-    private bool _loadingData;
-
-    protected override async Task OnInitializedAsync()
-    {
-        await LoadTodosAsync();
-    }
-
-    private async Task LoadTodosAsync()
-    {
-        _loadingData = true;
-        _items = await TodoRepository.GetAllAsync();
-        _loadingData = false;
-    }
-
-    private string GetCompletedOrNotComplectedTaskIcon(Todo todo)
-    {
-        return todo.Done ? Icons.Material.Filled.RadioButtonChecked : Icons.Material.Filled.RadioButtonUnchecked;
-    }
-    
-    private string GetDoneOrUndoneMessage(Todo todo)
-    {
-        return todo.Done ? "Undone" : "Done";
-    }
-
-    private async Task RemoveTodoAsync(Todo todo)
-    {
-        await TodoRepository.RemoveAsync(todo);
-        await LoadTodosAsync();
-    }
-
-    private async Task OnTodoItemClicked(Todo todo)
-    {
-        if (todo.Done) todo.MarkAsUndone();
-        else todo.MarkAsDone();
-
-        await TodoRepository.UpdateAsync(todo);
-        await LoadTodosAsync();
-    }
-
-    private async Task OpenDialog()
-    {
-        var options = new DialogOptions {CloseOnEscapeKey = true};
-        var dialog = DialogService.Show<CreateTodoDialog>("Create Todo Item", options);
-        var result = await dialog.Result;
-
-        if (!result.Cancelled)
-        {
-            await LoadTodosAsync();
-        }
-    }
-
-}
-```
-
-E um componente simples para registro de novos todos
+Basicamente só precisamos injetar no componente que quisermos o repositório e usar o banco de dados e tudo estará funcionando bem.
 
 ```csharp
-@using TodoList.Domain.Entities
-@using TodoList.Domain.Repositories
 @inject ITodoRepository TodoRepository
-<MudDialog>
-    <DialogContent>
-
-        <MudPaper Class="pa-4">
-            <MudForm @ref="form" @bind-IsValid="@success">
-                <MudTextField T="string" Label="Title" Variant="Variant.Outlined" @bind-Text="title" Required="true" RequiredError="Title is required!"/>
-                <MudTextField T="string" Label="Description" Variant="Variant.Outlined" @bind-Text="description" Required="true" RequiredError="Description is required" Lines="3"/>
-            </MudForm>
-        </MudPaper>
-
-    </DialogContent>
-    <DialogActions>
-        <MudButton OnClick="Cancel">Cancel</MudButton>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!success)" OnClick="Submit">Submit</MudButton>
-    </DialogActions>
-</MudDialog>
-
-@code {
-
-    [CascadingParameter]
-    MudDialogInstance MudDialog { get; set; }
-
-    MudForm form;
-    bool success;
-    string title;
-    string description;
-
-    void Cancel() => MudDialog.Cancel();
-
-    private async void Submit()
-    {
-        if (!success) return;
-        
-        var todo = new Todo(title, description);
-        await TodoRepository.RegisterAsync(todo);
-        MudDialog.Close(DialogResult.Ok(true));
-    }
-}
 ```
+
+Com isso basicamente já temos tudo implementado, basta seguir com usa imaginação e cuidado.
