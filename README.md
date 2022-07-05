@@ -20,7 +20,6 @@ Vamos criar três projetos básicos para construção desta aplicação, poderia
 > 1. [.NET SDK:](https://dotnet.microsoft.com/en-us/download/dotnet/6.0) 6.0.300
 > 2. [Microsoft.EntityFrameworkCore.Sqlite.Core:](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Sqlite.Core/6.0.5) 6.0.5
 > 3. [SQLitePCLRaw.bundle_e_sqlite3](https://www.nuget.org/packages/SQLitePCLRaw.bundle_e_sqlite3/2.1.0-pre20220427180151) (versão preview)
-> 4. [MudBlazor](https://mudblazor.com/docs/overview) (apenas para nos poupar tempo com o layout)
 
 Primeiro precisamos criar a solução conforme exemplo a baixo:
 
@@ -626,13 +625,12 @@ A partir daqui podemos começar a implementar o front, será algo simples e vamo
 
 ### 4. Implementação da Apresentação
 
-Vamos precisar de algumas dependência e referenciar o projeto de acesso a dados e o projeto de domínio.
+Vamos precisar de algumas referencias ao projeto de acesso a dados e o projeto de domínio.
 
 - `dotnet add reference ..\TodoList.Infra.Data\TodoList.Infra.Data.csproj`
 - `dotnet add reference ..\TodoList.Domain\TodoList.Domain.csproj`
-- [MudBlazor](https://www.nuget.org/packages/MudBlazor): dotnet add package MudBlazor
 
-Quanto a implementação do MudBlazor não vou me deter a isso aqui neste artigo, caso tenha interesse você pode olhar a documentação, caso não queira você pode, implementar na mão as paginas e componentes ou utilizar outro Framework conforme seu gosto e interesse!
+Quanto a implementação do Visual não vou me deter a isso aqui neste artigo, implemente conforme seu gosto e necessidade.
 
 Na classe Program vamos precisar de alguns ajustes simples que sera basicamente injetar os serviços que iremos utilizar.
 
@@ -660,4 +658,4 @@ Basicamente só precisamos injetar no componente que quisermos o repositório e 
 @inject ITodoRepository TodoRepository
 ```
 
-Com isso basicamente já temos tudo implementado, basta seguir com usa imaginação e cuidado.
+Com isso basicamente já temos tudo implementado, basta seguir com usa imaginação e construir aplicações.
