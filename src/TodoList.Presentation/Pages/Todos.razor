@@ -1,7 +1,9 @@
 ﻿@page "/Todos"
 @using TodoList.Domain.Entities
 @using TodoList.Domain.Repositories
+@using TodoList.Infra.Data.Services
 @inject ITodoRepository TodoRepository
+@inject IDatabaseStorageService DatabaseStorageService
 @inject IDialogService DialogService
 
 <MudText Typo="Typo.h4">Todos</MudText>
@@ -9,6 +11,10 @@
 <MudButton Class="mt-4" @onclick="OpenDialog" Variant="Variant.Filled" Color="Color.Primary">
     Add Todo Item
 </MudButton>
+
+<MudLink Href="@DataBaseDownloadLink" download Class="mt-4" Variant="Variant.Filled" Color="Color.Primary">
+    Database Download
+</MudLink>
 
 <MudDivider Class="mt-4 mb-4" DividerType="DividerType.FullWidth"></MudDivider>
 
@@ -41,13 +47,18 @@ else
     <MudProgressCircular Color="Color.Primary" Indeterminate="true"/>
 }
 
-@code {
+@code {    
+
     private IEnumerable<Todo> _items = Enumerable.Empty<Todo>();
     private bool _loadingData;
+
+
+    public string? DataBaseDownloadLink { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
         await LoadTodosAsync();
+        await DownloadDatabase();
     }
 
     private async Task LoadTodosAsync()
@@ -92,6 +103,11 @@ else
         {
             await LoadTodosAsync();
         }
+    }
+
+    private async Task DownloadDatabase()
+    {
+        DataBaseDownloadLink = await DatabaseStorageService.GenerateDownloadLinkAsync("todolist.sqlite3_backup");
     }
 
 }
